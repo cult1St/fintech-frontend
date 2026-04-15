@@ -1,0 +1,43 @@
+{
+  "name": "task-management-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "@fortawesome/react-fontawesome": "^0.2.2",
+    "@stomp/stompjs": "^7.1.1",
+    "@tanstack/react-query": "^5.90.9",
+    "axios": "^1.13.2",
+    "boxicons": "^2.1.4",
+    "next": "15.2.5",
+    "next-cloudinary": "^6.17.5",
+    "nprogress": "^0.2.0",
+    "react": "^19.0.0",
+    "react-datepicker": "^9.1.0",
+    "react-dom": "^19.0.0",
+    "sockjs-client": "^1.6.1",
+    "sweetalert2": "^11.26.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/jest": "^29",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/sockjs-client": "^1.5.4",
+    "eslint": "^9",
+    "eslint-config-next": "15.2.5",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^1.0.0"
+  }
+}
