@@ -15,12 +15,11 @@ const Footer = () => (
                     >
                         <div className="brand-icon">⚡</div>
                         <span className="brand-name">
-                            Task<span>Flow</span>
+                            Pay<span>Flow</span>
                         </span>
                     </div>
                     <p className="footer-brand-desc">
-                        The intelligent task management platform built for modern engineering
-                        teams. Powered by Spring Boot.
+                        The reliable fintech payflow solution built for modern banking and bills payments. Powered by Spring Boot.
                     </p>
                 </div>
                 <div>

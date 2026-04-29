@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
@@ -10,101 +10,122 @@ export default function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toasts, showToast, removeToast } = useToast();
+  const codeInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   const email = searchParams.get("email") || "";
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
-  const codeInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Resend countdown timer
   useEffect(() => {
-    if (resendCountdown > 0) {
-      const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
+    if (!resendCountdown) return;
+
+    const timer = window.setTimeout(() => {
+      setResendCountdown((current) => current - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
   }, [resendCountdown]);
 
   const handleCodeChange = (index: number, value: string) => {
-    // Only allow single digit
     if (!/^\d?$/.test(value)) return;
 
-    const codeArray = code.split("");
-    codeArray[index] = value;
-    const newCode = codeArray.join("").slice(0, 6);
-    setCode(newCode);
+    const nextCode = code.split("");
+    nextCode[index] = value;
+    setCode(nextCode.join("").slice(0, 6));
 
-    // Move to next input if digit entered
     if (value && index < 5) {
       codeInputsRef.current[index + 1]?.focus();
     }
   };
 
-  const handleCodeKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !code[index] && index > 0) {
+  const handleCodeKeyDown = (
+    index: number,
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (event.key === "Backspace" && !code[index] && index > 0) {
       codeInputsRef.current[index - 1]?.focus();
     }
   };
 
-  const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleVerify = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!email) {
+      showToast("A valid email is required to verify your account.", "error");
+      return;
+    }
 
     if (code.length !== 6) {
-      showToast("Please enter all 6 digits", "error");
+      showToast("Enter the full 6-digit code.", "error");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Call verification API
-      await authService.verifyEmail({ email, code });
-      showToast("Email verified successfully! Redirecting to login...", "success");
-      setTimeout(() => router.push("/login"), 1500);
-    } catch (err: any) {
-      showToast(err?.message || "Verification failed. Please try again.", "error");
+      await authService.confirmVerification({ email, code });
+      showToast("Email verified successfully. Sign in to continue.", "success");
+      router.push("/login");
+    } catch (err) {
+      showToast(
+        (err as { message?: string })?.message || "Verification failed. Please try again.",
+        "error"
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (resendCountdown > 0) return;
+    if (!email || resendCountdown > 0 || resendLoading) {
+      return;
+    }
 
     setResendLoading(true);
 
     try {
       await authService.resendVerificationCode({ email });
-      showToast("Verification code sent to your email", "success");
-      setResendCountdown(180); // 3 minutes
-      setCode(""); // Clear the code input
-    } catch (err: any) {
-      showToast(err?.message || "Failed to resend code", "error");
+      setCode("");
+      setResendCountdown(180);
+      showToast("A new verification code has been sent.", "success");
+    } catch (err) {
+      showToast((err as { message?: string })?.message || "Unable to resend code.", "error");
     } finally {
       setResendLoading(false);
     }
   };
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${minutes}:${remainder.toString().padStart(2, "0")}`;
   };
 
-  // Mask email to show: f***@example.com
- const maskEmail = (emailStr: string) => {
-    const [localPart, domain] = emailStr.split("@");
-    if (!localPart || !domain) return emailStr;
-    const masked = localPart[0] + "*".repeat(Math.max(localPart.length - 2, 1)) + localPart[localPart.length - 1];
-    return `${masked}@${domain}`;
+  const maskEmail = (emailValue: string) => {
+    const [localPart, domain] = emailValue.split("@");
+    if (!localPart || !domain) return emailValue;
+    if (localPart.length <= 2) return `${localPart[0] || ""}*@${domain}`;
+    return `${localPart[0]}${"*".repeat(localPart.length - 2)}${localPart[localPart.length - 1]}@${domain}`;
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "2rem 1rem" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--bg)",
+        padding: "2rem 1rem",
+      }}
+    >
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
       <div style={{ width: "100%", maxWidth: "440px" }}>
         <button
+          type="button"
           onClick={() => router.push("/register")}
           style={{
             display: "inline-flex",
@@ -113,13 +134,8 @@ export default function VerifyEmailPage() {
             color: "var(--text2)",
             fontSize: "13px",
             marginBottom: "1.5rem",
-            cursor: "pointer",
             background: "none",
-            border: "none",
-            transition: "color 0.2s",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text2)")}
         >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -128,99 +144,61 @@ export default function VerifyEmailPage() {
         </button>
 
         <div className="auth-card">
-          <div className="auth-logo">Pay<span style={{ color: "var(--text)" }}>Vault</span></div>
-          <div className="auth-tagline">Email verification</div>
+          <div className="auth-logo">
+            Pay<span style={{ color: "var(--text)" }}>Vault</span>
+          </div>
+          <div className="auth-tagline">Verify your email address</div>
 
-          <p
-            className="otp-info"
-            style={{
-              textAlign: "center",
-              fontSize: "14px",
-              color: "var(--text2)",
-              marginBottom: "0.5rem",
-            }}
-          >
-            We sent a 6-digit code to<br />
+          <p className="otp-info">
+            We sent a 6-digit code to
+            <br />
             <strong>{maskEmail(email)}</strong>
           </p>
 
           <form onSubmit={handleVerify}>
-            {/* 6-Digit Code Input */}
-            <div style={{ marginBottom: "1.5rem" }}>
-              <div
-                className="otp-grid"
-                style={{
-                  display: "flex",
-                  gap: "10px",
-                  justifyContent: "center",
-                  marginBottom: "1rem",
-                }}
-              >
-                {[0, 1, 2, 3, 4, 5].map((idx) => (
-                  <input
-                    key={idx}
-                    ref={(el) => {
-                      if (el) codeInputsRef.current[idx] = el;
-                    }}
-                    type="text"
-                    maxLength={1}
-                    value={code[idx] || ""}
-                    onChange={(e) => handleCodeChange(idx, e.target.value)}
-                    onKeyDown={(e) => handleCodeKeyDown(idx, e)}
-                    className="otp-cell"
-                    placeholder="•"
-                    style={{
-                      width: "50px",
-                      height: "56px",
-                      borderRadius: "10px",
-                    }}
-                  />
-                ))}
-              </div>
-              <p
-                style={{
-                  fontSize: "12px",
-                  color: "var(--text3)",
-                  textAlign: "center",
-                  margin: "0",
-                }}
-              >
-                Enter the 6-digit code from your email
-              </p>
+            <div className="otp-grid">
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <input
+                  key={index}
+                  ref={(element) => {
+                    codeInputsRef.current[index] = element;
+                  }}
+                  className="otp-cell"
+                  type="text"
+                  maxLength={1}
+                  value={code[index] || ""}
+                  onChange={(event) => handleCodeChange(index, event.target.value)}
+                  onKeyDown={(event) => handleCodeKeyDown(index, event)}
+                  placeholder="0"
+                />
+              ))}
             </div>
 
             <button
               type="submit"
               disabled={isLoading || code.length !== 6}
               className="btn-primary"
-              style={{
-                width: "100%",
-                opacity: isLoading || code.length !== 6 ? 0.6 : 1,
-              }}
+              style={{ opacity: isLoading || code.length !== 6 ? 0.6 : 1 }}
             >
-              {isLoading ? "Verifying..." : "Verify & continue →"}
+              {isLoading ? "Verifying..." : "Verify email"}
             </button>
           </form>
 
-          <p
-            className="otp-resend"
-            style={{
-              textAlign: "center",
-              fontSize: "13px",
-              color: "var(--text3)",
-              marginTop: "1rem",
-            }}
-          >
-            Didn't get it?{" "}
+          <p className="otp-resend">
+            Did not get it?{" "}
             <span
               onClick={handleResend}
               style={{
                 color: resendCountdown > 0 ? "var(--text3)" : "var(--green)",
                 cursor: resendCountdown > 0 ? "default" : "pointer",
-                fontWeight: resendCountdown > 0 ? "normal" : "500",
+                fontWeight: 500,
               }}
             >
-              {resendCountdown > 0 ? `Resend in ${formatTime(resendCountdown)}` : "Resend"}
+              {resendLoading
+                ? "Sending..."
+                : resendCountdown > 0
+                  ? `Resend in ${formatTime(resendCountdown)}`
+                  : "Resend code"}
             </span>
           </p>
         </div>

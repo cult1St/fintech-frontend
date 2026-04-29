@@ -7,8 +7,8 @@ import NavigationProgress from "@/components/NavigationProgress";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "Task Management App",
-  description: "Momodu Wealth Task Management application",
+  title: "Payflow finance App",
+  description: "Momodu Wealth Fintech Payflow application",
 };
 
 export default function RootLayout({

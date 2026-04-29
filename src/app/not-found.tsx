@@ -7,7 +7,7 @@ export default function NotFoundPage() {
         <Link href="/" className="navbar-brand">
           <div className="brand-icon">⚡</div>
           <span className="brand-name">
-            Task<span>Flow</span>
+            Pay<span>Flow</span>
           </span>
         </Link>
         <div className="nav-cta">

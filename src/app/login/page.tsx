@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LoginDTO, ErrorResponse, ValidationErrors } from "@/dto/auth";
-import authService from "@/services/auth.service";
-import { useAuth } from "@/context/auth-context";
+import { ErrorResponse, LoginDTO, ValidationErrors } from "@/dto/auth";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
+import { useAuth } from "@/context/auth-context";
+import authService from "@/services/auth.service";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,35 +15,31 @@ export default function LoginPage() {
   const { toasts, showToast, removeToast } = useToast();
 
   const [formData, setFormData] = useState<LoginDTO>({
-    email: "",
+    username: "",
     password: "",
   });
-
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
 
-    setFormData((prev) => ({
-      ...prev,
+    setFormData((current) => ({
+      ...current,
       [name]: value,
     }));
 
-    // Clear field error properly (no undefined issue)
     if (errors[name]) {
-      setErrors((prev) => {
-        const updated = { ...prev };
-        delete updated[name];
-        return updated;
-      });
+      setErrors((current) => ({
+        ...current,
+        [name]: undefined,
+      }));
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (isLoading) return;
 
     setIsLoading(true);
@@ -50,31 +47,39 @@ export default function LoginPage() {
 
     try {
       await authService.login(formData);
-
-      showToast("Login successful. Redirecting...", "success");
-
       await refreshUser();
+      showToast("Login successful. Redirecting to your dashboard.", "success");
       router.push("/user/dashboard");
-    } catch (err: unknown) {
-      const errData = err as ErrorResponse;
+    } catch (err) {
+      const error = err as ErrorResponse;
 
-      if (errData?.errors) {
-        setErrors(errData.errors);
+      if (error.errors) {
+        setErrors(error.errors);
       }
 
-      if (errData?.message) {
-        showToast(errData.message, "error");
-      }
+      showToast(error.message || "Unable to sign in right now.", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div id="page-login" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "2rem 1rem" }}>
+    <div
+      id="page-login"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--bg)",
+        padding: "2rem 1rem",
+      }}
+    >
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
       <div style={{ width: "100%", maxWidth: "440px" }}>
         <button
+          type="button"
           onClick={() => router.push("/")}
           style={{
             display: "inline-flex",
@@ -83,13 +88,8 @@ export default function LoginPage() {
             color: "var(--text2)",
             fontSize: "13px",
             marginBottom: "1.5rem",
-            cursor: "pointer",
             background: "none",
-            border: "none",
-            transition: "color 0.2s",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text2)")}
         >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -98,61 +98,69 @@ export default function LoginPage() {
         </button>
 
         <div className="auth-card">
-          <div className="auth-logo">Pay<span style={{ color: "var(--text)" }}>Vault</span></div>
+          <div className="auth-logo">
+            Pay<span style={{ color: "var(--text)" }}>Vault</span>
+          </div>
           <div className="auth-tagline">Welcome back to your wallet</div>
 
-        <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">Email address</label>
               <input
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                type="email"
                 className="form-input"
-                placeholder="you@example.com"
+                name="username"
+                type="text"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="your username(email or username)"
               />
-              {errors.email && (
-                <small className="form-error">{errors.email}</small>
-              )}
+              {errors.email ? <small className="form-error">{errors.email}</small> : null}
             </div>
 
             <div className="form-group">
               <label className="form-label">Password</label>
               <input
+                className="form-input"
                 name="password"
+                type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={handleChange}
-                type={showPassword ? "text" : "password"}
-                className="form-input"
                 placeholder="Your password"
               />
-              {errors.password && (
+              {errors.password ? (
                 <small className="form-error">{errors.password}</small>
-              )}
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <button
+                type="button"
+                className="auth-link"
+                onClick={() => setShowPassword((current) => !current)}
+                style={{ background: "none", fontSize: "13px" }}
+              >
+                {showPassword ? "Hide password" : "Show password"}
+              </button>
+
+              <Link href="/forgot-password" className="forgot-link" style={{ marginBottom: 0 }}>
+                Forgot password?
+              </Link>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
               className="btn-primary"
-              style={{
-                width: "100%",
-                opacity: isLoading ? 0.7 : 1,
-              }}
+              style={{ opacity: isLoading ? 0.7 : 1 }}
             >
-              {isLoading ? "Signing in..." : "Sign in →"}
+              {isLoading ? "Signing in..." : "Sign in"}
             </button>
           </form>
 
           <p className="auth-footer">
-            Don't have an account?{" "}
-            <span
-              onClick={() => router.push("/register")}
-              className="auth-link"
-              style={{ cursor: "pointer" }}
-            >
-              Create one free
+            Do not have an account?{" "}
+            <span onClick={() => router.push("/register")} className="auth-link">
+              Create one
             </span>
           </p>
         </div>

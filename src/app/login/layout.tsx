@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "Login Page - Task Management System",
-  description: "Momodu Wealth chat application Login Page",
+  title: "Login Page - Payflow System",
+  description: "Momodu Wealth Fintech Payflow application Login Page",
 };
 
 export default function LoginLayout({

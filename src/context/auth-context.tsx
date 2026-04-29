@@ -16,6 +16,7 @@ export interface AuthUser {
   full_name?: string;
   fullName?: string;
   name?: string;
+  username?: string;
   email?: string;
   role?: string;
   avatarUrl?: string;
@@ -24,6 +25,7 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
+  token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
@@ -37,16 +39,18 @@ function parseProfilePayload(payload: unknown): AuthUser | null {
 
   const asRecord = payload as Record<string, unknown>;
   const maybeNested = asRecord.data as Record<string, unknown> | undefined;
-  const user = (maybeNested?.user ?? maybeNested ?? asRecord) as Record<
-    string,
-    unknown
-  >;
+  const user = (
+    (maybeNested?.user as Record<string, unknown> | undefined) ??
+    maybeNested ??
+    asRecord
+  ) as Record<string, unknown>;
 
   const normalized: AuthUser = {
     id: (user.id as string | number | undefined) ?? undefined,
     full_name: (user.full_name as string | undefined) ?? undefined,
     fullName: (user.fullName as string | undefined) ?? undefined,
     name: (user.name as string | undefined) ?? undefined,
+    username: (user.username as string | undefined) ?? undefined,
     email: (user.email as string | undefined) ?? undefined,
     role: (user.role as string | undefined) ?? undefined,
     avatarUrl: (user.avatarUrl as string | undefined) ?? undefined,
@@ -57,6 +61,7 @@ function parseProfilePayload(payload: unknown): AuthUser | null {
     !normalized.fullName &&
     !normalized.full_name &&
     !normalized.name &&
+    !normalized.username &&
     !normalized.email
   ) {
     return null;
@@ -67,6 +72,7 @@ function parseProfilePayload(payload: unknown): AuthUser | null {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { setIsLoggedIn } = useTheme();
 
@@ -74,14 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return;
     sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("authUser");
+    sessionStorage.removeItem("walletState");
+    setToken(null);
   }, []);
 
   const refreshUser = useCallback(async () => {
     if (typeof window === "undefined") return;
     setIsLoading(true);
 
-    const token = sessionStorage.getItem("authToken");
-    if (!token) {
+    const storedToken = sessionStorage.getItem("authToken");
+    setToken(storedToken);
+
+    if (!storedToken) {
       setUser(null);
       setIsLoading(false);
       return;
@@ -108,8 +118,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await authService.logout();
-    } catch {
-      // Ensure local session is cleared even if backend logout fails.
     } finally {
       clearAuthStorage();
       setUser(null);
@@ -119,10 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const cached = sessionStorage.getItem("authUser");
-    if (cached) {
+    const cachedToken = sessionStorage.getItem("authToken");
+    const cachedUser = sessionStorage.getItem("authUser");
+
+    setToken(cachedToken);
+
+    if (cachedUser) {
       try {
-        setUser(JSON.parse(cached) as AuthUser);
+        setUser(JSON.parse(cachedUser) as AuthUser);
       } catch {
         sessionStorage.removeItem("authUser");
       }
@@ -131,20 +143,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshUser();
   }, [refreshUser]);
 
-  // Sync authentication status with theme system
   useEffect(() => {
-    setIsLoggedIn(Boolean(user));
-  }, [user, setIsLoggedIn]);
+    setIsLoggedIn(Boolean(user && token));
+  }, [token, user, setIsLoggedIn]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      token,
       isLoading,
-      isAuthenticated: Boolean(user),
+      isAuthenticated: Boolean(user && token),
       refreshUser,
       logout,
     }),
-    [isLoading, logout, refreshUser, user]
+    [isLoading, logout, refreshUser, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
