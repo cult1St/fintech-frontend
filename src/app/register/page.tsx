@@ -3,9 +3,10 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import authService from "@/services/auth.service";
-import { ErrorResponse, RegisterDTO, ValidationErrors } from "@/dto/auth";
+import { RegisterDTO, ValidationErrors } from "@/dto/auth";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
+import { clearFieldError, getApiErrorMessage, getApiValidationErrors } from "@/utils/api-error";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,11 +36,8 @@ export default function RegisterPage() {
       [name]: value,
     }));
 
-    if (errors[name]) {
-      setErrors((current) => ({
-        ...current,
-        [name]: undefined,
-      }));
+    if (errors[name] || errors.form) {
+      setErrors((current) => clearFieldError(clearFieldError(current, name), "form"));
     }
   };
 
@@ -83,13 +81,8 @@ export default function RegisterPage() {
       showToast("Registration successful. Verify your email to continue.", "success");
       router.push(`/register/verify-email?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
-      const error = err as ErrorResponse;
-
-      if (error.errors) {
-        setErrors(error.errors);
-      }
-
-      showToast(error.message || "Unable to create your account.", "error");
+      setErrors(getApiValidationErrors(err));
+      showToast(getApiErrorMessage(err, "Unable to create your account."), "error");
     } finally {
       setIsLoading(false);
     }
@@ -136,6 +129,11 @@ export default function RegisterPage() {
           <div className="auth-tagline">Create your free wallet in a few steps</div>
 
           <form onSubmit={handleSubmit}>
+            {errors.form ? (
+              <small className="form-error" style={{ display: "block", marginBottom: "1rem" }}>
+                {errors.form}
+              </small>
+            ) : null}
             <div className="form-group">
               <label className="form-label">Full name</label>
               <input

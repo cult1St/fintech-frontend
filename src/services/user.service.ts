@@ -1,14 +1,13 @@
-import { AxiosError } from "axios";
 import http from "./http";
-import { ErrorResponse } from "@/dto/auth";
-import {
+import type {
+  ChangePasswordPayload,
   AppearanceSettingsPayload,
   IntegrationSettingsPayload,
   NotificationPreferencesPayload,
   SecuritySettingsPayload,
   UserProfilePayload,
-  WorkspaceSettingsPayload,
 } from "@/dto/user";
+import { normalizeApiError } from "@/utils/api-error";
 
 /**
  * Backend response wrapper:
@@ -27,8 +26,11 @@ interface UserData {
   fullName?: string;
   full_name?: string;
   name?: string;
+  username?: string;
   email?: string;
+  phone?: string;
   role?: string;
+  roleTitle?: string;
   avatarUrl?: string;
   avatar_url?: string;
   avatar?: string;
@@ -40,23 +42,11 @@ interface SettingsData {
   security?: SecuritySettingsPayload;
   appearance?: AppearanceSettingsPayload;
   integrations?: IntegrationSettingsPayload;
-  workspace?: WorkspaceSettingsPayload;
 }
 
 class UserService {
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    console.log(axiosError);
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   // ==============================
@@ -77,7 +67,7 @@ class UserService {
   async updateProfile(payload: UserProfilePayload) {
     try {
       const response =
-        await http.patch<SuccessResponse<UserData>>("/users/me", payload);
+        await http.patch<SuccessResponse<UserData>>("/users/settings/profile", payload);
 
       return response.data.data; // unwrap SuccessResponse
     } catch (err) {
@@ -86,10 +76,24 @@ class UserService {
     }
   }
 
+  async changePassword(payload: ChangePasswordPayload) {
+    try {
+      const response =
+        await http.patch<SuccessResponse<{ success: boolean }>>(
+          "/users/settings/password-update",
+          payload
+        );
+
+      return response.data.data;
+    } catch (err) {
+      this.handleError(err);
+    }
+  }
+
   async getSettings() {
     try {
       const response =
-        await http.get<SuccessResponse<SettingsData>>("/users/me/settings");
+        await http.get<SuccessResponse<SettingsData>>("/users/settings");
 
       return response.data.data; // unwrap SuccessResponse
     } catch (err) {
@@ -153,19 +157,6 @@ class UserService {
     }
   }
 
-  async updateWorkspace(payload: WorkspaceSettingsPayload) {
-    try {
-      const response =
-        await http.patch<SuccessResponse<WorkspaceSettingsPayload>>(
-          "/users/me/settings/workspace",
-          payload
-        );
-
-      return response.data.data;
-    } catch (err) {
-      this.handleError(err);
-    }
-  }
 }
 
 const userService = new UserService();

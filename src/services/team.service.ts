@@ -1,7 +1,6 @@
-import { AxiosError } from "axios";
 import http from "./http";
-import { ErrorResponse } from "@/dto/auth";
 import { InviteMemberPayload, TeamMemberDTO, UpdateMemberPayload } from "@/dto/team";
+import { normalizeApiError } from "@/utils/api-error";
 
 interface SuccessResponse<T> {
   message: string;
@@ -10,17 +9,7 @@ interface SuccessResponse<T> {
 
 class TeamService {
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async list(search?: string) {

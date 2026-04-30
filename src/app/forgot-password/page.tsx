@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
 import authService from "@/services/auth.service";
+import { getApiErrorMessage } from "@/utils/api-error";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -24,10 +25,7 @@ export default function ForgotPasswordPage() {
       showToast("Reset code sent. Continue to reset your password.", "success");
       router.push(`/reset-password?email=${encodeURIComponent(email)}`);
     } catch (err) {
-      showToast(
-        (err as { message?: string })?.message || "Unable to start password reset.",
-        "error"
-      );
+      showToast(getApiErrorMessage(err, "Unable to start password reset."), "error");
     } finally {
       setIsLoading(false);
     }

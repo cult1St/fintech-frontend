@@ -190,7 +190,7 @@ export default function DashboardPage() {
               <div className="metric-card">
                 <div className="metric-lbl">Transactions</div>
                 <div className="metric-val">{transactions.length}</div>
-                <div className="metric-change metric-up">Mock and verified funds</div>
+                <div className="metric-change metric-up">Latest wallet activity</div>
               </div>
             </div>
           </div>

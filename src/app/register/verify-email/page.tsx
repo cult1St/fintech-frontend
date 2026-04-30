@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
 import authService from "@/services/auth.service";
+import { getApiErrorMessage } from "@/utils/api-error";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -69,10 +70,7 @@ export default function VerifyEmailPage() {
       showToast("Email verified successfully. Sign in to continue.", "success");
       router.push("/login");
     } catch (err) {
-      showToast(
-        (err as { message?: string })?.message || "Verification failed. Please try again.",
-        "error"
-      );
+      showToast(getApiErrorMessage(err, "Verification failed. Please try again."), "error");
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +89,7 @@ export default function VerifyEmailPage() {
       setResendCountdown(180);
       showToast("A new verification code has been sent.", "success");
     } catch (err) {
-      showToast((err as { message?: string })?.message || "Unable to resend code.", "error");
+      showToast(getApiErrorMessage(err, "Unable to resend code."), "error");
     } finally {
       setResendLoading(false);
     }

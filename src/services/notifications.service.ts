@@ -1,8 +1,8 @@
 import { AxiosError } from "axios";
 import http from "./http";
 import { logError } from "@/utils/telemetry";
-import { ErrorResponse } from "@/dto/auth";
 import { NotificationDTO } from "@/dto/notifications";
+import { normalizeApiError } from "@/utils/api-error";
 
 interface SuccessResponse<T> {
   message: string;
@@ -12,17 +12,7 @@ interface SuccessResponse<T> {
 class NotificationsService {
   private handleError(err: unknown): never {
     logError(err, { service: "notifications" });
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async list(params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {

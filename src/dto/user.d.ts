@@ -8,7 +8,14 @@ export interface UserProfilePayload {
   fullName: string;
   email: string;
   roleTitle: string;
+  phone?: string;
   avatarUrl?: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 export interface NotificationPreferencesPayload {

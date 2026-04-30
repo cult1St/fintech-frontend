@@ -1,27 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CldUploadWidget } from "next-cloudinary";
 import { useAuth } from "@/context/auth-context";
-import { AppearanceSettingsPayload, IntegrationSettingsPayload, NotificationPreferencesPayload, SecuritySettingsPayload, UserProfilePayload, WorkspaceSettingsPayload } from "@/dto/user";
-import userService from "@/services/user.service";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
-
-type SettingsTab =
-  | "profile"
-  | "notifications"
-  | "security"
-  | "appearance"
-  | "integrations"
-  | "workspace";
+import type { ValidationErrors } from "@/dto/auth";
+import type {
+  ChangePasswordPayload,
+  SecuritySettingsPayload,
+  UserProfilePayload,
+} from "@/dto/user";
+import userService from "@/services/user.service";
+import {
+  clearFieldError,
+  getApiErrorMessage,
+  getApiValidationErrors,
+} from "@/utils/api-error";
 
 interface LoadedUserShape {
   full_name?: string;
   fullName?: string;
   name?: string;
   email?: string;
+  username?: string;
+  phone?: string;
   roleTitle?: string;
   role?: string;
   avatar?: string;
@@ -35,49 +38,31 @@ export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuth();
   const { toasts, showToast, removeToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const bodyOverflowRef = useRef<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [profileErrors, setProfileErrors] = useState<ValidationErrors>({});
+  const [passwordErrors, setPasswordErrors] = useState<ValidationErrors>({});
 
   const [profile, setProfile] = useState<UserProfilePayload>({
     fullName: "",
     email: "",
     roleTitle: "",
+    phone: "",
     avatarUrl: "",
   });
-
-  const [notifications, setNotifications] =
-    useState<NotificationPreferencesPayload>({
-      taskAssignments: true,
-      deadlineReminders: true,
-      teamActivity: false,
-      weeklyDigestEmail: true,
-    });
 
   const [security, setSecurity] = useState<SecuritySettingsPayload>({
     twoFactorAuth: false,
     loginAlerts: true,
   });
 
-  const [appearance, setAppearance] = useState<AppearanceSettingsPayload>({
-    compactSidebar: false,
-    reduceMotion: false,
+  const [passwordForm, setPasswordForm] = useState<ChangePasswordPayload>({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
-
-  const [integrations, setIntegrations] = useState<IntegrationSettingsPayload>({
-    githubConnected: false,
-    slackConnected: false,
-    jiraConnected: false,
-  });
-
-  const [workspace, setWorkspace] = useState<WorkspaceSettingsPayload>({
-    workspaceName: "My Workspace",
-  });
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "demo";
-  const uploadPreset =
-    process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "ml_default";
-  const uploadFolder = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_FOLDER || "taskflow/avatars";
 
   const displayName = useMemo(
     () =>
@@ -85,7 +70,7 @@ export default function SettingsPage() {
       user?.fullName ||
       user?.full_name ||
       user?.name ||
-      "TaskFlow User",
+      "PayVault User",
     [profile.fullName, user?.fullName, user?.full_name, user?.name]
   );
 
@@ -96,243 +81,132 @@ export default function SettingsPage() {
         .filter(Boolean)
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase())
-        .join("") || "TF",
+        .join("") || "PV",
     [displayName]
   );
 
+  const splitName = useMemo(() => {
+    const parts = displayName.trim().split(/\s+/).filter(Boolean);
+    return {
+      firstName: parts[0] || "",
+      lastName: parts.slice(1).join(" "),
+    };
+  }, [displayName]);
+
   useEffect(() => {
     const bootstrap = async () => {
+      setIsLoading(true);
+
       try {
         const meResponse = (await userService.getCurrentUser()) as
           | LoadedUserShape
           | { data?: LoadedUserShape };
-        const me: LoadedUserShape = "data" in meResponse && meResponse.data ? meResponse.data : meResponse as LoadedUserShape;
+        const me: LoadedUserShape =
+          "data" in meResponse && meResponse.data
+            ? meResponse.data
+            : (meResponse as LoadedUserShape);
 
-        setProfile((prev) => ({
-          ...prev,
+        setProfile({
           fullName:
-            me?.fullName ||
-            me?.full_name ||
-            me?.name ||
+            me.fullName ||
+            me.full_name ||
+            me.name ||
             user?.fullName ||
             user?.full_name ||
             user?.name ||
             "",
           email: me.email || user?.email || "",
           roleTitle: me.roleTitle || me.role || user?.role || "",
+          phone: me.phone || "",
           avatarUrl:
             me.avatarUrl || me.avatar_url || me.avatar || me.profile_image || "",
-        }));
+        });
 
         try {
           const settingsResponse = (await userService.getSettings()) as
             | Record<string, unknown>
             | { data?: Record<string, unknown> };
-
           const raw =
             (settingsResponse as { data?: Record<string, unknown> }).data ||
             (settingsResponse as Record<string, unknown>);
 
-          if (raw?.notifications) {
-            setNotifications((prev) => ({
-              ...prev,
-              ...(raw.notifications as Partial<NotificationPreferencesPayload>),
-            }));
-          }
           if (raw?.security) {
-            setSecurity((prev) => ({
-              ...prev,
+            setSecurity((current) => ({
+              ...current,
               ...(raw.security as Partial<SecuritySettingsPayload>),
             }));
           }
-          if (raw?.appearance) {
-            setAppearance((prev) => ({
-              ...prev,
-              ...(raw.appearance as Partial<AppearanceSettingsPayload>),
-            }));
-          }
-          if (raw?.integrations) {
-            setIntegrations((prev) => ({
-              ...prev,
-              ...(raw.integrations as Partial<IntegrationSettingsPayload>),
-            }));
-          }
-          if (raw?.workspace) {
-            setWorkspace((prev) => ({
-              ...prev,
-              ...(raw.workspace as Partial<WorkspaceSettingsPayload>),
-            }));
-          }
         } catch {
-          // Settings endpoint may not exist yet; local state still works.
+          // Security settings may not be available yet.
         }
-      } catch {
-        setProfile((prev) => ({
-          ...prev,
-          fullName: user?.fullName || user?.full_name || user?.name || prev.fullName,
-          email: user?.email || prev.email,
-          roleTitle: user?.role || prev.roleTitle,
-        }));
+      } catch (err) {
+        showToast(getApiErrorMessage(err, "Unable to load your profile."), "error");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     void bootstrap();
-  }, [user?.email, user?.fullName, user?.full_name, user?.name, user?.role]);
-
-  useEffect(() => {
-    return () => {
-      if (typeof document !== "undefined" && bodyOverflowRef.current !== null) {
-        document.body.style.overflow = bodyOverflowRef.current;
-      }
-    };
-  }, []);
-
-  const lockScroll = () => {
-    if (typeof document === "undefined") return;
-    if (bodyOverflowRef.current === null) {
-      bodyOverflowRef.current = document.body.style.overflow || "";
-    }
-    document.body.style.overflow = "hidden";
-  };
-
-  const unlockScroll = () => {
-    if (typeof document === "undefined") return;
-    if (bodyOverflowRef.current !== null) {
-      document.body.style.overflow = bodyOverflowRef.current;
-      bodyOverflowRef.current = null;
-    } else {
-      document.body.style.overflow = "";
-    }
-  };
+  }, [
+    showToast,
+    user?.email,
+    user?.fullName,
+    user?.full_name,
+    user?.name,
+    user?.role,
+  ]);
 
   const handleSaveProfile = async () => {
-    setIsSaving(true);
+    setIsSavingProfile(true);
+    setProfileErrors({});
+
     try {
       await userService.updateProfile(profile);
       await refreshUser();
-      showToast("Profile updated.", "success");
+      showToast("Profile updated successfully.", "success");
     } catch (err) {
-      const message =
-        (err as { message?: string })?.message || "Could not save profile.";
-      showToast(message, "error");
+      setProfileErrors(getApiValidationErrors(err));
+      showToast(getApiErrorMessage(err, "Could not save profile changes."), "error");
     } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAvatarUploaded = async (secureUrl: string) => {
-    try {
-      setIsUploadingAvatar(true);
-      setProfile((prev) => ({ ...prev, avatarUrl: secureUrl }));
-      await userService.updateProfile({
-        ...profile,
-        avatarUrl: secureUrl,
-      });
-      await refreshUser();
-
-      showToast("Profile image updated.", "success");
-    } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not upload profile image.";
-      showToast(message, "error");
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
-  const handleAvatarRemove = async () => {
-    try {
-      setIsUploadingAvatar(true);
-      setProfile((prev) => ({ ...prev, avatarUrl: "" }));
-      await userService.updateProfile({
-        ...profile,
-        avatarUrl: "",
-      });
-      await refreshUser();
-      showToast("Profile image removed.", "success");
-    } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not remove profile image.";
-      showToast(message, "error");
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
-  const handleSaveNotifications = async () => {
-    setIsSaving(true);
-    try {
-      await userService.updateNotifications(notifications);
-      showToast("Notification preferences updated.", "success");
-    } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not save notification settings.";
-      showToast(message, "error");
-    } finally {
-      setIsSaving(false);
+      setIsSavingProfile(false);
     }
   };
 
   const handleSaveSecurity = async () => {
-    setIsSaving(true);
+    setIsSavingSecurity(true);
+
     try {
       await userService.updateSecurity(security);
       showToast("Security settings updated.", "success");
     } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not save security settings.";
-      showToast(message, "error");
+      showToast(getApiErrorMessage(err, "Could not update security settings."), "error");
     } finally {
-      setIsSaving(false);
+      setIsSavingSecurity(false);
     }
   };
 
-  const handleSaveAppearance = async () => {
-    setIsSaving(true);
-    try {
-      await userService.updateAppearance(appearance);
-      showToast("Appearance preferences updated.", "success");
-    } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not save appearance settings.";
-      showToast(message, "error");
-    } finally {
-      setIsSaving(false);
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showToast("New passwords do not match.", "error");
+      return;
     }
-  };
 
-  const handleSaveIntegrations = async () => {
-    setIsSaving(true);
-    try {
-      await userService.updateIntegrations(integrations);
-      showToast("Integration settings updated.", "success");
-    } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not save integration settings.";
-      showToast(message, "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    setIsChangingPassword(true);
+    setPasswordErrors({});
 
-  const handleSaveWorkspace = async () => {
-    setIsSaving(true);
     try {
-      await userService.updateWorkspace(workspace);
-      showToast("Workspace name saved.", "success");
+      await userService.changePassword(passwordForm);
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      showToast("Password updated successfully.", "success");
     } catch (err) {
-      const message =
-        (err as { message?: string })?.message ||
-        "Could not update workspace name.";
-      showToast(message, "error");
+      setPasswordErrors(getApiValidationErrors(err));
+      showToast(getApiErrorMessage(err, "Could not update your password."), "error");
     } finally {
-      setIsSaving(false);
+      setIsChangingPassword(false);
     }
   };
 
@@ -341,449 +215,324 @@ export default function SettingsPage() {
     router.replace("/login");
   };
 
+  const handleNamePartChange = (key: "firstName" | "lastName", value: string) => {
+    const nextFirstName = key === "firstName" ? value : splitName.firstName;
+    const nextLastName = key === "lastName" ? value : splitName.lastName;
+
+    setProfile((current) => ({
+      ...current,
+      fullName: [nextFirstName, nextLastName].filter(Boolean).join(" ").trim(),
+    }));
+  };
+
   return (
     <div>
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
       <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-        <p className="page-subtitle">Manage your account preferences</p>
+        <h1 className="page-title">Profile</h1>
+        <p className="page-subtitle">Manage your account details and security</p>
       </div>
 
-      <div className="settings-layout">
-        <div className="settings-nav">
-          <button
-            className={`settings-nav-item ${activeTab === "profile" ? "active" : ""}`}
-            onClick={() => setActiveTab("profile")}
-          >
-            Profile
-          </button>
-          <button
-            className={`settings-nav-item ${activeTab === "notifications" ? "active" : ""}`}
-            onClick={() => setActiveTab("notifications")}
-          >
-            Notifications
-          </button>
-          <button
-            className={`settings-nav-item ${activeTab === "security" ? "active" : ""}`}
-            onClick={() => setActiveTab("security")}
-          >
-            Security
-          </button>
-          <button
-            className={`settings-nav-item ${activeTab === "appearance" ? "active" : ""}`}
-            onClick={() => setActiveTab("appearance")}
-          >
-            Appearance
-          </button>
-          <button
-            className={`settings-nav-item ${activeTab === "integrations" ? "active" : ""}`}
-            onClick={() => setActiveTab("integrations")}
-          >
-            Integrations
-          </button>
-          <button
-            className={`settings-nav-item ${activeTab === "workspace" ? "active" : ""}`}
-            onClick={() => setActiveTab("workspace")}
-          >
-            Workspace
-          </button>
-          <button
-            className="settings-nav-item"
-            onClick={handleSignOut}
-            style={{ color: "var(--rose-400)" }}
-          >
-            Sign Out
-          </button>
+      {isLoading ? (
+        <div className="card">
+          <div style={{ color: "var(--text3)" }}>Loading your profile...</div>
         </div>
-
-        <div className="settings-content">
-          {activeTab === "profile" ? (
-            <>
-              <div className="settings-section-title">Profile Information</div>
-              <div className="settings-section-sub">
-                Update your name, photo, and personal details.
-              </div>
-
-              <div className="avatar-upload">
-                <div className="avatar-lg">
+      ) : (
+        <div className="two-col">
+          <div>
+            <div className="card" style={{ marginBottom: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "1.5rem" }}>
+                <div
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    background: "var(--green-light)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "22px",
+                    fontWeight: 700,
+                    color: "var(--green-dark)",
+                    overflow: "hidden",
+                  }}
+                >
                   {profile.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={profile.avatarUrl}
-                      alt={`${displayName} avatar`}
-                      className="avatar-lg-image"
+                      alt={displayName}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
                     />
                   ) : (
                     initials
                   )}
                 </div>
                 <div>
-                  <div
-                    style={{
-                      fontSize: "0.875rem",
-                      fontWeight: 600,
-                      color: "var(--white)",
-                      marginBottom: "0.4rem",
-                    }}
-                  >
-                    {displayName}
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <CldUploadWidget
-                      options={{
-                        maxFiles: 1,
-                        resourceType: "image",
-                        folder: uploadFolder,
-                        sources: ["local", "url", "camera"],
-                      }}
-                      uploadPreset={uploadPreset}
-                      config={{ cloud: { cloudName } }}
-                      onOpen={lockScroll}
-                      onClose={unlockScroll}
-                      onQueuesStart={() => setIsUploadingAvatar(true)}
-                      onSuccess={(result) => {
-                        const payload = result as { info?: { secure_url?: string } };
-                        const secureUrl = payload?.info?.secure_url;
-                        if (secureUrl) {
-                          void handleAvatarUploaded(secureUrl);
-                          unlockScroll();
-                        } else {
-                          setIsUploadingAvatar(false);
-                          showToast(
-                            "Cloudinary did not return a valid image URL.",
-                            "error"
-                          );
-                          unlockScroll();
-                        }
-                      }}
-                      onError={() => {
-                        setIsUploadingAvatar(false);
-                        showToast("Could not upload image to Cloudinary.", "error");
-                        unlockScroll();
-                      }}
-                    >
-                      {({ open }) => (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => open()}
-                          disabled={isUploadingAvatar}
-                          type="button"
-                        >
-                          {isUploadingAvatar ? "Uploading..." : "Upload photo"}
-                        </button>
-                      )}
-                    </CldUploadWidget>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={handleAvatarRemove}
-                      disabled={isUploadingAvatar || !profile.avatarUrl}
-                    >
-                      Remove
-                    </button>
+                  <div style={{ fontSize: "17px", fontWeight: 700 }}>{displayName}</div>
+                  <div style={{ fontSize: "13px", color: "var(--text3)" }}>{profile.email}</div>
+                  <div style={{ marginTop: "6px" }}>
+                    <span className="pill pill-success">Verified</span>
                   </div>
                 </div>
               </div>
 
-              <div className="form-group" style={{ marginBottom: "1rem" }}>
-                <label className="form-label">Full Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={profile.fullName}
-                  onChange={(e) =>
-                    setProfile((prev) => ({ ...prev, fullName: e.target.value }))
-                  }
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">First name</label>
+                  <input
+                    className="form-input"
+                    value={splitName.firstName}
+                    onChange={(event) => {
+                      setProfileErrors((current) => clearFieldError(current, "fullName"));
+                      handleNamePartChange("firstName", event.target.value);
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Last name</label>
+                  <input
+                    className="form-input"
+                    value={splitName.lastName}
+                    onChange={(event) => {
+                      setProfileErrors((current) => clearFieldError(current, "fullName"));
+                      handleNamePartChange("lastName", event.target.value);
+                    }}
+                  />
+                </div>
               </div>
+              {profileErrors.fullName ? <small className="form-error">{profileErrors.fullName}</small> : null}
 
-              <div className="form-group" style={{ marginBottom: "1rem" }}>
-                <label className="form-label">Email Address</label>
+              <div className="form-group">
+                <label className="form-label">Email</label>
                 <input
+                  className="form-input"
                   type="email"
-                  className="form-input"
                   value={profile.email}
-                  onChange={(e) =>
-                    setProfile((prev) => ({ ...prev, email: e.target.value }))
-                  }
+                  disabled={true}
+                  onChange={(event) => {
+                    setProfileErrors((current) => clearFieldError(current, "email"));
+                    setProfile((current) => ({ ...current, email: event.target.value }));
+                  }}
                 />
+                {profileErrors.email ? <small className="form-error">{profileErrors.email}</small> : null}
               </div>
 
-              <div className="form-group" style={{ marginBottom: "1.5rem" }}>
-                <label className="form-label">Role / Title</label>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
                 <input
-                  type="text"
+                  className="form-input"
+                  value={profile.phone || ""}
+                  onChange={(event) => {
+                    setProfileErrors((current) => clearFieldError(current, "phone"));
+                    setProfile((current) => ({ ...current, phone: event.target.value }));
+                  }}
+                />
+                {profileErrors.phone ? <small className="form-error">{profileErrors.phone}</small> : null}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Role</label>
+                <input
                   className="form-input"
                   value={profile.roleTitle}
-                  onChange={(e) =>
-                    setProfile((prev) => ({ ...prev, roleTitle: e.target.value }))
-                  }
+                  onChange={(event) => {
+                    setProfileErrors((current) => clearFieldError(current, "roleTitle"));
+                    setProfile((current) => ({ ...current, roleTitle: event.target.value }));
+                  }}
                 />
+                {profileErrors.roleTitle ? <small className="form-error">{profileErrors.roleTitle}</small> : null}
               </div>
 
               <button
-                className="btn btn-primary"
-                onClick={handleSaveProfile}
-                disabled={isSaving}
+                className="btn-primary"
+                type="button"
+                onClick={() => void handleSaveProfile()}
+                disabled={isSavingProfile}
               >
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSavingProfile ? "Saving changes..." : "Save changes"}
               </button>
-            </>
-          ) : null}
+            </div>
 
-          {activeTab === "notifications" ? (
-            <>
-              <div className="settings-section-title">Notification Preferences</div>
-              <div className="settings-section-sub">
-                Choose what you want to be notified about.
-              </div>
-
-              <ToggleRow
-                title="Task Assignments"
-                description="When someone assigns you to a task"
-                value={notifications.taskAssignments}
-                onToggle={() =>
-                  setNotifications((prev) => ({
-                    ...prev,
-                    taskAssignments: !prev.taskAssignments,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Deadline Reminders"
-                description="Get reminded 24 hours before a task is due"
-                value={notifications.deadlineReminders}
-                onToggle={() =>
-                  setNotifications((prev) => ({
-                    ...prev,
-                    deadlineReminders: !prev.deadlineReminders,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Team Activity"
-                description="Updates on project activity from your team"
-                value={notifications.teamActivity}
-                onToggle={() =>
-                  setNotifications((prev) => ({
-                    ...prev,
-                    teamActivity: !prev.teamActivity,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Weekly Digest Email"
-                description="Summary of your week's work every Friday"
-                value={notifications.weeklyDigestEmail}
-                onToggle={() =>
-                  setNotifications((prev) => ({
-                    ...prev,
-                    weeklyDigestEmail: !prev.weeklyDigestEmail,
-                  }))
-                }
-              />
-
-              <button
-                className="btn btn-primary"
-                onClick={handleSaveNotifications}
-                disabled={isSaving}
-                style={{ marginTop: "1rem" }}
-              >
-                {isSaving ? "Saving..." : "Save Notification Settings"}
-              </button>
-            </>
-          ) : null}
-
-          {activeTab === "security" ? (
-            <>
-              <div className="settings-section-title">Security</div>
-              <div className="settings-section-sub">
-                Strengthen access and account protection.
-              </div>
-
-              <ToggleRow
-                title="Two-Factor Authentication"
-                description="Require an extra verification step on login"
-                value={security.twoFactorAuth}
-                onToggle={() =>
-                  setSecurity((prev) => ({
-                    ...prev,
-                    twoFactorAuth: !prev.twoFactorAuth,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Login Alerts"
-                description="Email me when a new login is detected"
-                value={security.loginAlerts}
-                onToggle={() =>
-                  setSecurity((prev) => ({
-                    ...prev,
-                    loginAlerts: !prev.loginAlerts,
-                  }))
-                }
-              />
-
-              <button
-                className="btn btn-primary"
-                onClick={handleSaveSecurity}
-                disabled={isSaving}
-                style={{ marginTop: "1rem" }}
-              >
-                {isSaving ? "Saving..." : "Save Security Settings"}
-              </button>
-            </>
-          ) : null}
-
-          {activeTab === "appearance" ? (
-            <>
-              <div className="settings-section-title">Appearance</div>
-              <div className="settings-section-sub">
-                Control display and dashboard visual behavior.
-              </div>
-
-              <ToggleRow
-                title="Compact Sidebar"
-                description="Use a denser sidebar layout by default"
-                value={appearance.compactSidebar}
-                onToggle={() =>
-                  setAppearance((prev) => ({
-                    ...prev,
-                    compactSidebar: !prev.compactSidebar,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Reduce Motion"
-                description="Minimize non-essential animations"
-                value={appearance.reduceMotion}
-                onToggle={() =>
-                  setAppearance((prev) => ({
-                    ...prev,
-                    reduceMotion: !prev.reduceMotion,
-                  }))
-                }
-              />
-
-              <button
-                className="btn btn-primary"
-                onClick={handleSaveAppearance}
-                disabled={isSaving}
-                style={{ marginTop: "1rem" }}
-              >
-                {isSaving ? "Saving..." : "Save Appearance Settings"}
-              </button>
-            </>
-          ) : null}
-
-          {activeTab === "integrations" ? (
-            <>
-              <div className="settings-section-title">Integrations</div>
-              <div className="settings-section-sub">
-                Manage app integrations connected to your workspace.
-              </div>
-
-              <ToggleRow
-                title="GitHub"
-                description="Enable GitHub sync for issues and pull requests"
-                value={integrations.githubConnected}
-                onToggle={() =>
-                  setIntegrations((prev) => ({
-                    ...prev,
-                    githubConnected: !prev.githubConnected,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Slack"
-                description="Send task and project updates to Slack"
-                value={integrations.slackConnected}
-                onToggle={() =>
-                  setIntegrations((prev) => ({
-                    ...prev,
-                    slackConnected: !prev.slackConnected,
-                  }))
-                }
-              />
-              <ToggleRow
-                title="Jira"
-                description="Link Jira tickets with TaskFlow tasks"
-                value={integrations.jiraConnected}
-                onToggle={() =>
-                  setIntegrations((prev) => ({
-                    ...prev,
-                    jiraConnected: !prev.jiraConnected,
-                  }))
-                }
-              />
-
-              <button
-                className="btn btn-primary"
-                onClick={handleSaveIntegrations}
-                disabled={isSaving}
-                style={{ marginTop: "1rem" }}
-              >
-                {isSaving ? "Saving..." : "Save Integration Settings"}
-              </button>
-            </>
-          ) : null}
-
-          {activeTab === "workspace" ? (
-            <>
-              <div className="settings-section-title">Workspace</div>
-              <div className="settings-section-sub">
-                Update your current workspace details.
-              </div>
-
-              <div className="form-group" style={{ marginBottom: "1.5rem" }}>
-                <label className="form-label">Workspace Name</label>
+            <div className="card">
+              <h3 style={{ fontSize: "15px", fontWeight: 600, marginBottom: "1rem" }}>
+                Change password
+              </h3>
+              <div className="form-group">
+                <label className="form-label">Current password</label>
                 <input
-                  type="text"
                   className="form-input"
-                  value={workspace.workspaceName}
-                  onChange={(e) =>
-                    setWorkspace((prev) => ({
-                      ...prev,
-                      workspaceName: e.target.value,
-                    }))
-                  }
+                  type="password"
+                  placeholder="••••••••"
+                  value={passwordForm.currentPassword}
+                  onChange={(event) => {
+                    setPasswordErrors((current) => clearFieldError(current, "currentPassword"));
+                    setPasswordForm((current) => ({
+                      ...current,
+                      currentPassword: event.target.value,
+                    }));
+                  }}
                 />
+                {passwordErrors.currentPassword ? <small className="form-error">{passwordErrors.currentPassword}</small> : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label">New password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Min 8 characters"
+                  value={passwordForm.newPassword}
+                  onChange={(event) => {
+                    setPasswordErrors((current) => clearFieldError(current, "newPassword"));
+                    setPasswordForm((current) => ({
+                      ...current,
+                      newPassword: event.target.value,
+                    }));
+                  }}
+                />
+                {passwordErrors.newPassword ? <small className="form-error">{passwordErrors.newPassword}</small> : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Confirm new password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Re-enter new password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => {
+                    setPasswordErrors((current) => clearFieldError(current, "confirmPassword"));
+                    setPasswordForm((current) => ({
+                      ...current,
+                      confirmPassword: event.target.value,
+                    }));
+                  }}
+                />
+                {passwordErrors.confirmPassword ? <small className="form-error">{passwordErrors.confirmPassword}</small> : null}
+              </div>
+              <button
+                className="btn-primary"
+                type="button"
+                onClick={() => void handleChangePassword()}
+                disabled={isChangingPassword}
+              >
+                {isChangingPassword ? "Updating password..." : "Update password"}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="card" style={{ marginBottom: "1rem" }}>
+              <h3 style={{ fontSize: "15px", fontWeight: 600, marginBottom: "1rem" }}>
+                Security settings
+              </h3>
+              <div style={{ fontSize: "13px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 0",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Two-factor auth</div>
+                    <div style={{ color: "var(--text3)", fontSize: "12px", marginTop: "2px" }}>
+                      Extra security on login
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle ${security.twoFactorAuth ? "on" : "off"}`}
+                    onClick={() =>
+                      setSecurity((current) => ({
+                        ...current,
+                        twoFactorAuth: !current.twoFactorAuth,
+                      }))
+                    }
+                  >
+                    <div className="toggle-knob" />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 0",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Transaction PIN</div>
+                    <div style={{ color: "var(--text3)", fontSize: "12px", marginTop: "2px" }}>
+                      Required for payments
+                    </div>
+                  </div>
+                  <span className="pill pill-success">Set</span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 0",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Login notifications</div>
+                    <div style={{ color: "var(--text3)", fontSize: "12px", marginTop: "2px" }}>
+                      Email alert on new login
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`toggle ${security.loginAlerts ? "on" : "off"}`}
+                    onClick={() =>
+                      setSecurity((current) => ({
+                        ...current,
+                        loginAlerts: !current.loginAlerts,
+                      }))
+                    }
+                  >
+                    <div className="toggle-knob" />
+                  </button>
+                </div>
               </div>
 
               <button
-                className="btn btn-primary"
-                onClick={handleSaveWorkspace}
-                disabled={isSaving}
+                className="btn-primary"
+                type="button"
+                style={{ marginTop: "1rem" }}
+                onClick={() => void handleSaveSecurity()}
+                disabled={isSavingSecurity}
               >
-                {isSaving ? "Saving..." : "Save Workspace"}
+                {isSavingSecurity ? "Saving security..." : "Save security settings"}
               </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
+            </div>
 
-function ToggleRow({
-  title,
-  description,
-  value,
-  onToggle,
-}: {
-  title: string;
-  description: string;
-  value: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-row-info">
-        <div className="settings-row-title">{title}</div>
-        <div className="settings-row-desc">{description}</div>
-      </div>
-      <button className={`toggle ${value ? "on" : ""}`} onClick={onToggle}>
-        <div className="toggle-knob" />
-      </button>
+            <div className="card">
+              <h3 style={{ fontSize: "15px", fontWeight: 600, marginBottom: "1rem" }}>
+                Account actions
+              </h3>
+              <p style={{ fontSize: "13px", color: "var(--text2)", marginBottom: "1rem" }}>
+                Sign out of this session if you are using a shared device.
+              </p>
+              <button
+                className="btn-outline"
+                type="button"
+                onClick={() => void handleSignOut()}
+                style={{ marginTop: 0 }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

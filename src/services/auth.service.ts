@@ -1,7 +1,5 @@
-import { AxiosError } from "axios";
 import {
   ConfirmVerificationDTO,
-  ErrorResponse,
   ForgotPasswordDTO,
   LoginDTO,
   RegisterDTO,
@@ -10,6 +8,7 @@ import {
   VerifyCodeDTO,
 } from "@/dto/auth";
 import http from "./http";
+import { normalizeApiError } from "@/utils/api-error";
 
 type AuthRecord = Record<string, unknown>;
 
@@ -53,17 +52,7 @@ class AuthService {
   }
 
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async login(formData: LoginDTO) {

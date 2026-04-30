@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
 import authService from "@/services/auth.service";
+import { getApiErrorMessage } from "@/utils/api-error";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function ResetPasswordPage() {
       showToast("Password reset successful. Sign in with your new password.", "success");
       router.push("/login");
     } catch (err) {
-      showToast((err as { message?: string })?.message || "Unable to reset password.", "error");
+      showToast(getApiErrorMessage(err, "Unable to reset password."), "error");
     } finally {
       setIsLoading(false);
     }

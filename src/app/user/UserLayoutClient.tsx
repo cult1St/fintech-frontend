@@ -1,10 +1,22 @@
 ﻿"use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { useAuth } from "@/context/auth-context";
+
+const PAGE_TITLES: Record<string, string> = {
+  "/user/dashboard": "Dashboard",
+  "/user/wallet": "Wallet",
+  "/user/transactions": "Transactions",
+  "/user/fund": "Fund Wallet",
+  "/user/airtime": "Airtime",
+  "/user/data": "Data",
+  "/user/bills": "Bill Payment",
+  "/user/settings": "Profile",
+  "/user/notifications": "Notifications",
+};
 
 export default function UserLayoutClient({
   children,
@@ -13,8 +25,10 @@ export default function UserLayoutClient({
   children: React.ReactNode;
   pageTitle?: string;
 }) {
+  const pathname = usePathname();
   const router = useRouter();
   const { isLoading, isAuthenticated, refreshUser } = useAuth();
+  const resolvedPageTitle = PAGE_TITLES[pathname] || pageTitle;
 
   useEffect(() => {
     if (isLoading || isAuthenticated) {
@@ -51,7 +65,7 @@ export default function UserLayoutClient({
     <div className="user-layout">
       <Sidebar />
       <div className="main-area">
-        <Topbar pageTitle={pageTitle} />
+        <Topbar pageTitle={resolvedPageTitle} />
         <div className="content-area">{children}</div>
       </div>
     </div>

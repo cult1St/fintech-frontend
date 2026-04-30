@@ -1,6 +1,4 @@
-import { AxiosError } from "axios";
 import http from "./http";
-import { ErrorResponse } from "@/dto/auth";
 import { CreateProjectPayload, ProjectDTO, ProjectStatus, UpdateProjectPayload } from "@/dto/projects";
 import {
   InvitationStatus,
@@ -9,6 +7,7 @@ import {
   ProjectInviteUserOptionDTO,
   ProjectMemberDTO,
 } from "@/dto/invitations";
+import { normalizeApiError } from "@/utils/api-error";
 
 interface SuccessResponse<T> {
   message: string;
@@ -17,17 +16,7 @@ interface SuccessResponse<T> {
 
 class ProjectsService {
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async list(status?: ProjectStatus) {

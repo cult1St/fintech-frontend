@@ -1,6 +1,5 @@
-import { AxiosError } from "axios";
 import http from "./http";
-import { ErrorResponse } from "@/dto/auth";
+import { normalizeApiError } from "@/utils/api-error";
 import {
   CalendarEventDTO,
   CalendarEventFilters,
@@ -15,17 +14,7 @@ interface SuccessResponse<T> {
 
 class CalendarService {
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async list(filters?: CalendarEventFilters) {

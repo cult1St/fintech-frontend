@@ -1,6 +1,6 @@
 "use client";
 
-import { ToastItem } from "@/hooks/useToast";
+import type { ToastItem } from "@/hooks/useToast";
 
 const toastIcon: Record<ToastItem["type"], string> = {
   success: "✓",
@@ -15,14 +15,20 @@ export default function ToastContainer({
   toasts: ToastItem[];
   onDismiss: (id: number) => void;
 }) {
+  if (!toasts.length) {
+    return null;
+  }
+
   return (
-    <div className="toast-container" id="toastContainer">
+    <div className="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true">
       {toasts.map((toast) => (
-        <div key={toast.id} className={`toast ${toast.type}`}>
-          <span className="toast-icon">{toastIcon[toast.type]}</span>
+        <div key={toast.id} className={`toast show toast-${toast.type}`} role="status">
+          <span className="toast-icon" aria-hidden="true">
+            {toastIcon[toast.type]}
+          </span>
           <span className="toast-text">{toast.message}</span>
           <button
-            className="btn btn-icon"
+            className="toast-dismiss"
             type="button"
             onClick={() => onDismiss(toast.id)}
             aria-label="Dismiss toast"

@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ErrorResponse, LoginDTO, ValidationErrors } from "@/dto/auth";
+import { LoginDTO, ValidationErrors } from "@/dto/auth";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
 import { useAuth } from "@/context/auth-context";
 import authService from "@/services/auth.service";
+import { clearFieldError, getApiErrorMessage, getApiValidationErrors } from "@/utils/api-error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,11 +31,8 @@ export default function LoginPage() {
       [name]: value,
     }));
 
-    if (errors[name]) {
-      setErrors((current) => ({
-        ...current,
-        [name]: undefined,
-      }));
+    if (errors[name] || errors.form) {
+      setErrors((current) => clearFieldError(clearFieldError(current, name), "form"));
     }
   };
 
@@ -51,13 +49,8 @@ export default function LoginPage() {
       showToast("Login successful. Redirecting to your dashboard.", "success");
       router.push("/user/dashboard");
     } catch (err) {
-      const error = err as ErrorResponse;
-
-      if (error.errors) {
-        setErrors(error.errors);
-      }
-
-      showToast(error.message || "Unable to sign in right now.", "error");
+      setErrors(getApiValidationErrors(err));
+      showToast(getApiErrorMessage(err, "Unable to sign in right now."), "error");
     } finally {
       setIsLoading(false);
     }
@@ -104,6 +97,11 @@ export default function LoginPage() {
           <div className="auth-tagline">Welcome back to your wallet</div>
 
           <form onSubmit={handleSubmit}>
+            {errors.form ? (
+              <small className="form-error" style={{ display: "block", marginBottom: "1rem" }}>
+                {errors.form}
+              </small>
+            ) : null}
             <div className="form-group">
               <label className="form-label">Email address</label>
               <input
@@ -114,7 +112,9 @@ export default function LoginPage() {
                 onChange={handleChange}
                 placeholder="your username(email or username)"
               />
-              {errors.email ? <small className="form-error">{errors.email}</small> : null}
+              {errors.username || errors.email ? (
+                <small className="form-error">{errors.username || errors.email}</small>
+              ) : null}
             </div>
 
             <div className="form-group">

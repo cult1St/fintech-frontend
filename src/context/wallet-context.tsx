@@ -10,112 +10,100 @@ import {
 } from "react";
 import { VerifyFundResult, WalletTransaction } from "@/dto/wallet";
 import { useAuth } from "./auth-context";
+import walletService from "@/services/wallet.service";
 
 interface WalletContextValue {
   balance: number;
   transactions: WalletTransaction[];
-  applyVerifiedFunding: (result: VerifyFundResult) => void;
+  isLoading: boolean;
+  applyVerifiedFunding: (result: VerifyFundResult) => Promise<void>;
   resetWallet: () => void;
 }
 
-const MOCK_TRANSACTIONS: WalletTransaction[] = [
-  {
-    id: "mock-1",
-    reference: "PVT-001",
-    name: "Wallet Top-up",
-    sub: "Bank transfer",
-    type: "credit",
-    amount: 100000,
-    status: "success",
-    date: "Apr 26",
-    channel: "Transfer",
-    isMock: true,
-  },
-  {
-    id: "mock-2",
-    reference: "PVT-002",
-    name: "DStv Compact",
-    sub: "Bill payment",
-    type: "debit",
-    amount: 9000,
-    status: "success",
-    date: "Apr 25",
-    channel: "Bills",
-    isMock: true,
-  },
-  {
-    id: "mock-3",
-    reference: "PVT-003",
-    name: "MTN Airtime",
-    sub: "08031234567",
-    type: "debit",
-    amount: 2500,
-    status: "success",
-    date: "Apr 24",
-    channel: "Airtime",
-    isMock: true,
-  },
-];
-
-const DEFAULT_BALANCE = 247850;
+const DEFAULT_BALANCE = 0;
 const STORAGE_KEY = "walletState";
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
-function formatTransactionDate(date = new Date()) {
-  return date.toLocaleDateString("en-NG", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [balance, setBalance] = useState(DEFAULT_BALANCE);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>(MOCK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const resetWallet = useCallback(() => {
     setBalance(DEFAULT_BALANCE);
-    setTransactions(MOCK_TRANSACTIONS);
+    setTransactions([]);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
-  const applyVerifiedFunding = useCallback((result: VerifyFundResult) => {
-    const amount = result.amount || 0;
+  const refreshWallet = useCallback(async () => {
+    if (!isAuthenticated) {
+      return;
+    }
 
-    setBalance((currentBalance) => {
-      if (typeof result.balance === "number" && Number.isFinite(result.balance)) {
-        return result.balance;
-      }
+    setIsLoading(true);
 
-      return currentBalance + amount;
-    });
-
-    setTransactions((currentTransactions) => {
-      const existing = currentTransactions.find(
-        (item) => item.reference === result.reference
+    try {
+      const details = await walletService.getDetails();
+      const mappedTransactions = (details?.recentTransactions || []).map((transaction) =>
+        walletService.mapWalletTransaction(transaction)
       );
-      if (existing) {
-        return currentTransactions;
+
+      setBalance(Number(details?.balance || 0));
+      setTransactions(mappedTransactions);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const applyVerifiedFunding = useCallback(
+    async (result: VerifyFundResult) => {
+      const normalizedStatus = result.status === true ? "success" : result.status;
+
+      if (normalizedStatus === "success") {
+        await refreshWallet();
+        return;
       }
 
-      const nextTransaction: WalletTransaction = {
-        id: result.reference,
-        reference: result.reference,
-        name: result.transaction?.name || "Wallet Top-up",
-        sub: result.transaction?.sub || "Paystack",
-        type: "credit",
-        amount,
-        status: result.status || "success",
-        date: result.transaction?.date || formatTransactionDate(),
-        channel: result.transaction?.channel || "Paystack",
-      };
+      const amount = result.amount || 0;
+      setBalance((currentBalance) => {
+        if (typeof result.balance === "number" && Number.isFinite(result.balance)) {
+          return result.balance;
+        }
 
-      return [nextTransaction, ...currentTransactions];
-    });
-  }, []);
+        return currentBalance + amount;
+      });
+
+      setTransactions((currentTransactions) => {
+        const existing = currentTransactions.find(
+          (item) => item.reference === result.reference
+        );
+        if (existing) {
+          return currentTransactions;
+        }
+
+        return [
+          {
+            id: result.reference,
+            reference: result.reference,
+            name: result.transaction?.name || "Wallet Top-up",
+            sub: result.transaction?.sub || "Wallet funding",
+            type: "credit",
+            amount,
+            status: normalizedStatus || "pending",
+            date: result.transaction?.date || "",
+            channel: result.transaction?.channel || "Wallet funding",
+            createdAt: result.transaction?.createdAt,
+          },
+          ...currentTransactions,
+        ];
+      });
+    },
+    [refreshWallet]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -157,19 +145,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [balance, transactions]);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isAuthLoading && isAuthenticated) {
+      void refreshWallet();
+    }
+  }, [isAuthenticated, isAuthLoading, refreshWallet]);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
       resetWallet();
     }
-  }, [isAuthenticated, isLoading, resetWallet]);
+  }, [isAuthenticated, isAuthLoading, resetWallet]);
 
   const value = useMemo(
     () => ({
       balance,
       transactions,
+      isLoading,
       applyVerifiedFunding,
       resetWallet,
     }),
-    [applyVerifiedFunding, balance, resetWallet, transactions]
+    [applyVerifiedFunding, balance, isLoading, resetWallet, transactions]
   );
 
   return (

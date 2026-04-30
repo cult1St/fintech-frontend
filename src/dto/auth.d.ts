@@ -44,4 +44,6 @@ export interface ValidationErrors {
 export interface ErrorResponse {
   message: string;
   errors?: ValidationErrors;
+  status?: number;
+  success?: boolean;
 }

@@ -6,6 +6,7 @@ import {
   ProjectInvitationDTO,
   RespondToInvitationPayload,
 } from "@/dto/invitations";
+import { normalizeApiError } from "@/utils/api-error";
 
 interface SuccessResponse<T> {
   message: string;
@@ -20,17 +21,7 @@ class InvitationsService {
   }
 
   private handleError(err: unknown): never {
-    const axiosError = err as AxiosError<ErrorResponse>;
-    const data = axiosError.response?.data;
-
-    if (data) {
-      throw data;
-    }
-
-    throw {
-      message: axiosError.message || "Network error",
-      status: axiosError.response?.status,
-    };
+    throw normalizeApiError(err);
   }
 
   async listReceived(filters?: InvitationFilters): Promise<ProjectInvitationDTO[]> {
