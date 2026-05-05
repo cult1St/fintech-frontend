@@ -56,7 +56,7 @@ class UserService {
   async getCurrentUser() {
     try {
       const response =
-        await http.get<SuccessResponse<UserData>>("/users/me");
+        await http.get<SuccessResponse<UserData>>("/users/settings/me");
 
       return response.data.data; // unwrap SuccessResponse
     } catch (err) {
@@ -93,7 +93,7 @@ class UserService {
   async getSettings() {
     try {
       const response =
-        await http.get<SuccessResponse<SettingsData>>("/users/settings");
+        await http.get<SuccessResponse<SecuritySettingsPayload>>("/users/settings/security");
 
       return response.data.data; // unwrap SuccessResponse
     } catch (err) {
@@ -101,11 +101,12 @@ class UserService {
     }
   }
 
+
   async updateNotifications(payload: NotificationPreferencesPayload) {
     try {
       const response =
         await http.patch<SuccessResponse<NotificationPreferencesPayload>>(
-          "/users/me/settings/notifications",
+          "/users/settings/notifications",
           payload
         );
 
@@ -119,7 +120,7 @@ class UserService {
     try {
       const response =
         await http.patch<SuccessResponse<SecuritySettingsPayload>>(
-          "/users/me/settings/security",
+          "/users/settings/security",
           payload
         );
 
@@ -129,33 +130,8 @@ class UserService {
     }
   }
 
-  async updateAppearance(payload: AppearanceSettingsPayload) {
-    try {
-      const response =
-        await http.patch<SuccessResponse<AppearanceSettingsPayload>>(
-          "/users/me/settings/appearance",
-          payload
-        );
-
-      return response.data.data;
-    } catch (err) {
-      this.handleError(err);
-    }
-  }
-
-  async updateIntegrations(payload: IntegrationSettingsPayload) {
-    try {
-      const response =
-        await http.patch<SuccessResponse<IntegrationSettingsPayload>>(
-          "/users/me/settings/integrations",
-          payload
-        );
-
-      return response.data.data;
-    } catch (err) {
-      this.handleError(err);
-    }
-  }
+  
+  
 
 }
 

@@ -123,19 +123,15 @@ export default function SettingsPage() {
         });
 
         try {
-          const settingsResponse = (await userService.getSettings()) as
-            | Record<string, unknown>
-            | { data?: Record<string, unknown> };
-          const raw =
-            (settingsResponse as { data?: Record<string, unknown> }).data ||
-            (settingsResponse as Record<string, unknown>);
-
-          if (raw?.security) {
-            setSecurity((current) => ({
+          const settingsResponse: SecuritySettingsPayload = await userService.getSettings();
+         
+          setSecurity((current) => ({
               ...current,
-              ...(raw.security as Partial<SecuritySettingsPayload>),
+              ...settingsResponse,
             }));
-          }
+          
+            
+          
         } catch {
           // Security settings may not be available yet.
         }
@@ -332,18 +328,7 @@ export default function SettingsPage() {
                 {profileErrors.phone ? <small className="form-error">{profileErrors.phone}</small> : null}
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Role</label>
-                <input
-                  className="form-input"
-                  value={profile.roleTitle}
-                  onChange={(event) => {
-                    setProfileErrors((current) => clearFieldError(current, "roleTitle"));
-                    setProfile((current) => ({ ...current, roleTitle: event.target.value }));
-                  }}
-                />
-                {profileErrors.roleTitle ? <small className="form-error">{profileErrors.roleTitle}</small> : null}
-              </div>
+             
 
               <button
                 className="btn-primary"

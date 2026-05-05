@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import ToastContainer from "@/components/ToastContainer";
 import { useToast } from "@/hooks/useToast";
+import { useNotifications } from "@/context/notifications-context";
 import notificationsService from "@/services/notifications.service";
-import { NotificationDTO } from "@/dto/notifications";
+import type { NotificationDTO } from "@/dto/notifications";
 
 import { formatDateTime } from "@/utils/dateUtil";
 
@@ -14,6 +15,7 @@ function formatDate(value: string) {
 
 export default function NotificationsPage() {
   const { toasts, showToast, removeToast } = useToast();
+  const { markAsRead, markAllAsRead, notificationsVersion } = useNotifications();
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
@@ -49,11 +51,11 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     void loadNotifications(showUnreadOnly);
-  }, [loadNotifications, showUnreadOnly]);
+  }, [loadNotifications, notificationsVersion, showUnreadOnly]);
 
   const handleMarkRead = async (notificationId: number) => {
     try {
-      await notificationsService.markRead(notificationId);
+      await markAsRead(notificationId);
       setNotifications((prev) =>
         prev.map((item) =>
           item.id === notificationId ? { ...item, read: true } : item
@@ -68,7 +70,7 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await notificationsService.markAllRead();
+      await markAllAsRead();
       setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
       showToast("All notifications marked as read.", "success");
     } catch (err) {
@@ -82,71 +84,84 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
-    <div>
+    <div className="notifications-page">
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      <div className="page-header">
-        <h1 className="page-title">Notifications</h1>
-        <p className="page-subtitle">Stay updated on invites, tasks, and project activity</p>
+      <div className="notifications-page-header">
+        <div>
+          <h1 className="notifications-page-title">Notifications</h1>
+          <p className="notifications-page-subtitle">
+            Stay updated on wallet activity, payments, and account alerts.
+          </p>
+        </div>
+
+        <div className="notifications-page-summary">
+          <span className="notifications-summary-label">Unread</span>
+          <span className="notifications-summary-value">{unreadCount}</span>
+        </div>
       </div>
 
-      <div className="tasks-toolbar">
-        <div className="filter-tabs">
+      <div className="notifications-toolbar">
+        <div className="notifications-filter-tabs">
           <button
-            className={`filter-tab ${showUnreadOnly ? "active" : ""}`}
+            type="button"
+            className={`notifications-filter-tab ${showUnreadOnly ? "active" : ""}`}
             onClick={() => setShowUnreadOnly(true)}
           >
             Unread
           </button>
           <button
-            className={`filter-tab ${!showUnreadOnly ? "active" : ""}`}
+            type="button"
+            className={`notifications-filter-tab ${!showUnreadOnly ? "active" : ""}`}
             onClick={() => setShowUnreadOnly(false)}
           >
             All
           </button>
         </div>
 
-        <button className="btn btn-secondary btn-sm" onClick={() => void handleMarkAllRead()}>
+        <button
+          type="button"
+          className="notifications-toolbar-button"
+          onClick={() => void handleMarkAllRead()}
+          disabled={!unreadCount}
+        >
           Mark all read
         </button>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">
+      <div className="card notifications-card">
+        <div className="notifications-card-header">
+          <span className="notifications-card-title">
             {showUnreadOnly ? `Unread (${unreadCount})` : "Notification History"}
           </span>
         </div>
-        <div style={{ padding: "1rem" }}>
+        <div className="notifications-card-body">
           {isLoading ? (
-            <div className="empty-state">
-              <div className="empty-state-desc">Loading notifications...</div>
+            <div className="notifications-empty-state">
+              <div className="notifications-empty-desc">Loading notifications...</div>
             </div>
           ) : notifications.length ? (
-            <>
+            <div className="notifications-list">
               {notifications.map((item) => (
                 <div
                   key={item.id}
-                  className="task-item"
-                  style={
-                    item.read
-                      ? undefined
-                      : {
-                          border: "1px solid rgba(45,212,191,0.18)",
-                          background: "rgba(45,212,191,0.04)",
-                        }
-                  }
+                  className={`notifications-item ${item.read ? "" : "unread"}`.trim()}
                 >
-                  <div className="task-info">
-                    <div className="task-name">{item.title || "Notification"}</div>
-                    <div className="task-meta-row">
-                      <span className="task-due">{item.message}</span>
-                      <span className="task-due">{formatDate(item.createdAt)}</span>
+                  <div className="notifications-item-copy">
+                    <div className="notifications-item-topline">
+                      <div className="notifications-item-title">
+                        {item.title || "Notification"}
+                      </div>
+                      <div className="notifications-item-date">
+                        {formatDate(item.createdAt)}
+                      </div>
                     </div>
+                    <div className="notifications-item-message">{item.message}</div>
                   </div>
                   {!item.read ? (
                     <button
-                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      className="notifications-item-button"
                       onClick={() => void handleMarkRead(item.id)}
                     >
                       Mark read
@@ -154,22 +169,23 @@ export default function NotificationsPage() {
                   ) : null}
                 </div>
               ))}
-              {hasMore ? (
-                <div style={{ padding: "1rem", textAlign: "center" }}>
+              <div className="notifications-footer">
+                {hasMore ? (
                   <button
-                    className="btn btn-secondary btn-sm"
+                    type="button"
+                    className="notifications-toolbar-button"
                     onClick={() => void loadNotifications(showUnreadOnly, offset + 50)}
                     disabled={isLoading}
                   >
                     {isLoading ? "Loading..." : "Load more"}
                   </button>
-                </div>
-              ) : null}
-            </>
+                ) : null}
+              </div>
+            </div>
           ) : (
-            <div className="empty-state">
-              <div className="empty-state-title">No notifications</div>
-              <div className="empty-state-desc">You&apos;re all caught up.</div>
+            <div className="notifications-empty-state">
+              <div className="notifications-empty-title">No notifications</div>
+              <div className="notifications-empty-desc">You&apos;re all caught up.</div>
             </div>
           )}
         </div>
